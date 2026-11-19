@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>登入 · 訂票監控</title>
+<link rel="icon" href="static/icon.svg?v=132637db49">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="static/icon.svg?v=132637db49">
+<meta name="theme-color" content="#2563eb">
+<link rel="stylesheet" href="static/style.css?v=a191c0a1b9">
+<script>try{const t=localStorage.getItem("br_theme");if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+<style>
+  .login { max-width: 460px; margin: 6vh auto 40px; padding: 0 16px; }
+  .login img { width: 56px; display: block; margin: 0 auto 12px; }
+  .login h1 { text-align: center; font-size: 22px; margin: 0 0 20px; }
+  .login .err { color: var(--bad); font-size: 14px; min-height: 20px; margin: 8px 0; }
+  .login button[type=submit] { width: 100%; padding: 11px; }
+  .login ol { padding-left: 20px; font-size: 14px; line-height: 1.7; }
+  .login code { font-size: 13px; background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="login">
+  <img src="static/icon.svg?v=132637db49" alt="">
+  <h1>訂票監控</h1>
+  <section class="card">
+    <form id="f" autocomplete="off">
+      <div class="grid">
+        <label class="f">GitHub 帳號<input type="text" id="owner" required autocapitalize="off"></label>
+        <label class="f">私人 repo 名稱<input type="text" id="repo" required autocapitalize="off"></label>
+        <label class="f full">GitHub Token<input type="password" id="token" required placeholder="github_pat_..."></label>
+      </div>
+      <div class="err" id="err"></div>
+      <button class="primary" type="submit">登入</button>
+    </form>
+  </section>
+  <details class="card" style="padding:16px 20px" id="howto">
+    <summary style="cursor:pointer;font-weight:600">第一次使用：怎麼建立 Token？</summary>
+    <ol>
+      <li>打開 <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub → Fine-grained token</a></li>
+      <li>Token name 隨意（例如「訂票監控」），Expiration 選 1 年或自訂</li>
+      <li>Repository access 選 <b>Only select repositories</b> → 只勾你的私人 repo</li>
+      <li>Permissions → Repository permissions 設為 <b>Read and write</b>：<br>
+        <code>Contents</code>、<code>Actions</code>、<code>Secrets</code>、<code>Variables</code></li>
+      <li>按 Generate token，複製貼到上面</li>
+    </ol>
+    <p class="hint">Token 只存在這台裝置的瀏覽器，不會上傳到任何地方（只用來呼叫 GitHub API）。手機和電腦各登入一次即可；不用了可以到同一頁刪除 token。</p>
+  </details>
+</div>
+<script src="static/backend-config.js?v=7abc152fdb"></script>
+<script>
+  const D = window.GH_DEFAULTS || {};
+  const $ = (id) => document.getElementById(id);
+  $("owner").value = D.owner || "";
+  $("repo").value = D.repo || "";
+  if (new URLSearchParams(location.search).has("expired")) $("err").textContent = "Token 已失效或被撤銷，請重新登入。";
+  else $("howto").open = true;
+  $("f").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const owner = $("owner").value.trim(), repo = $("repo").value.trim(), token = $("token").value.trim();
+    const btn = e.target.querySelector("button");
+    $("err").textContent = "";
+    btn.disabled = true;
+    try {
+      const r = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" }, cache: "no-store",
+      });
+      if (r.status === 401) throw new Error("Token 不正確或已過期");
+      if (r.status === 404) throw new Error("找不到這個 repo，或 token 沒有勾選這個 repo");
+      if (!r.ok) throw new Error(`GitHub 錯誤 ${r.status}`);
+      const perm = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/variables`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" }, cache: "no-store",
+      });
+      if (!perm.ok) throw new Error("Token 缺少 Variables 權限（請照下方步驟設定權限）");
+      localStorage.setItem("br_github", JSON.stringify({ owner, repo, token }));
+      location.href = "./";
+    } catch (err) {
+      $("err").textContent = err.message;
+    }
+    btn.disabled = false;
+  });
+</script>
+</body>
+</html>

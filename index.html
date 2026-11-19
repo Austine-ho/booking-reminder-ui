@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>訂票監控</title>
+<link rel="icon" href="static/icon.svg?v=132637db49">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="static/icon.svg?v=132637db49">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#2563eb">
+<link rel="stylesheet" href="static/style.css?v=a191c0a1b9">
+<script>try{const t=localStorage.getItem("br_theme");if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <img src="static/icon.svg?v=132637db49" alt="">
+    <h1>訂票監控</h1>
+    <button class="small open-chip" id="openChip" type="button" title="已開放、可以訂購的項目" hidden>🎫<b>0</b></button>
+    <div class="badges" id="badges"></div>
+    <button class="small icon-btn" id="themeBtn" type="button" title="切換明亮／深色">🌓</button>
+    <button class="small" id="logout" hidden>登出</button>
+  </header>
+  <nav class="tabs" role="tablist">
+    <button type="button" role="tab" data-tab="main" aria-selected="true">📋 監控</button>
+    <button type="button" role="tab" data-tab="settings" aria-selected="false">⚙️ 設定</button>
+    <button type="button" role="tab" data-tab="guide" aria-selected="false">📖 教學</button>
+  </nav>
+  <div class="banner hot-banner" id="hotBanner" role="status" hidden></div>
+  <div id="banners"></div>
+
+  <div class="page" id="page-main">
+  <!-- ① 新增需求 -->
+  <section class="card" id="add">
+    <h2><span class="num">1</span>新增需求</h2>
+    <form id="addForm" autocomplete="off">
+      <div class="grid">
+        <label class="f">想訂的項目
+          <input type="text" name="item" required placeholder="例：三鷹之森吉卜力美術館、USJ 快速通關">
+        </label>
+        <label class="f">目標日期
+          <input type="date" name="target_date" required>
+        </label>
+        <label class="f full">備註 <small>（人數、時段、偏好的購買管道…）</small>
+          <input type="text" name="notes" placeholder="例：2大1小，下午時段">
+        </label>
+
+        <div class="f full">每天檢查時間 <small class="tzlabel"></small>
+          <div class="times" data-times></div>
+        </div>
+
+        <label class="f">預計開放時間 <small>（選填，AI 查到會自動填；到時會多檢查一次）</small>
+          <input type="datetime-local" name="open_local">
+        </label>
+        <label class="f">時區
+          <select name="open_tz" id="tzSelect"></select>
+        </label>
+
+        <label class="f full" id="urlsField" hidden>網址 <small>（一行一個，可以填官方與第三方多個網站）</small>
+          <textarea name="urls" rows="3" placeholder="https://..."></textarea>
+        </label>
+      </div>
+      <div class="f src-row">網址來源
+        <div class="src-line">
+          <div class="seg">
+            <label><input type="radio" name="mode" value="ai" checked><span>🤖 AI<i class="lng"> 自動</i>查詢</span></label>
+            <label><input type="radio" name="mode" value="manual"><span>自己填網址</span></label>
+          </div>
+          <button class="primary" type="submit" id="addBtn">新增<i class="lng">需求</i></button>
+        </div>
+      </div>
+    </form>
+    <div class="research" id="research" hidden></div>
+  </section>
+
+  <!-- ② 監控狀態 -->
+  <section class="card" id="status">
+    <h2><span class="num">2</span>監控狀態 <span class="right" id="updated"></span></h2>
+    <div class="banner" id="lateBanner" hidden></div>
+    <div id="runInfo" class="hint" hidden></div>
+    <div id="reqList"><div class="empty">載入中…</div></div>
+  </section>
+
+  <!-- ③ 每日總覽 -->
+  <section class="card" id="summaryCard">
+    <h2><span class="num">3</span>每日 Telegram 總覽</h2>
+    <form id="sumForm" autocomplete="off">
+      <div class="grid">
+        <label class="f">每天傳送追蹤狀態總表
+          <select name="daily_summary">
+            <option value="">關閉</option>
+            <option value="on">開啟</option>
+          </select>
+        </label>
+        <label class="f">傳送時間 <small>（台灣時間；GitHub 版可能晚 5~30 分鐘）</small><input type="time" name="daily_summary_time" placeholder="23:00"></label>
+      </div>
+      <p class="hint">內容：每個項目的網站、官方預計開放時間、檢查頻率、上次確認時間與結果、下次確認時間。</p>
+      <div class="actions">
+        <button type="button" id="summaryNow">立即傳一次看看</button>
+        <button class="primary" type="submit">儲存</button>
+      </div>
+    </form>
+  </section>
+  </div>
+
+  <div class="page" id="page-settings" hidden>
+  <!-- 設定 -->
+  <section class="card settings" id="settings">
+    <h2>⚙️ 設定</h2>
+    <p class="hint" id="secretHint"></p>
+    <form id="setForm" autocomplete="off">
+      <h3>Telegram 通知</h3>
+      <div class="grid">
+        <label class="f full">Bot Token <small>（找 @BotFather 輸入 /newbot 取得）</small>
+          <input type="password" name="telegram_bot_token" placeholder="123456789:AA...">
+        </label>
+        <label class="f full">Chat ID <small>（先對你的 bot 傳一句話，再按「自動取得」）</small>
+          <div class="row">
+            <input type="text" name="telegram_chat_id" inputmode="numeric" placeholder="例：123456789">
+            <button type="button" id="getChatId">自動取得</button>
+          </div>
+        </label>
+      </div>
+
+      <details style="margin-top:14px">
+        <summary class="hint" style="cursor:pointer">LINE 通知（選填，LINE Notify 已停止服務，需用 Messaging API）</summary>
+        <div class="grid" style="margin-top:10px">
+          <label class="f full">Channel access token<input type="password" name="line_channel_access_token"></label>
+          <label class="f full">Your user ID <small>（U 開頭，在 Basic settings 頁面最下方）</small><input type="text" name="line_user_id"></label>
+        </div>
+      </details>
+
+      <h3>AI</h3>
+      <div class="grid">
+        <label class="f">AI 來源
+          <select name="ai_provider">
+            <option value="">自動（有 Groq Key 就用 Groq）</option>
+            <option value="groq">Groq（免費）</option>
+            <option value="gemini">Gemini（免費額度）</option>
+            <option value="claude">Claude（付費）</option>
+            <option value="none">不使用 AI（只用規則判斷）</option>
+          </select>
+        </label>
+        <label class="f">Groq API Key <small>（console.groq.com 申請）</small><input type="password" name="groq_api_key" placeholder="gsk_..."></label>
+        <label class="f">Groq API Key（備用） <small>（第二個 Groq 帳號，第一組額度用完自動換）</small><input type="password" name="groq_api_key_2" placeholder="gsk_...（選填）"></label>
+        <label class="f">Gemini API Key <small>（選填，Groq 兩組都用完才會用）</small><input type="password" name="gemini_api_key" placeholder="AIza...（最後備援）"></label>
+        <label class="f">每個網站每天最多呼叫 AI<input type="text" inputmode="numeric" name="ai_max_per_site_day" placeholder="6"></label>
+        <label class="f">全部合計每天最多<input type="text" inputmode="numeric" name="ai_max_per_day" placeholder="30"></label>
+      </div>
+      <p class="hint" id="aiUsage"></p>
+      <details>
+        <summary class="hint" style="cursor:pointer">進階：模型、Claude API Key</summary>
+        <div class="grid" style="margin-top:10px">
+          <label class="f">Groq 模型<input type="text" name="groq_model" placeholder="openai/gpt-oss-20b（每次檢查用）"></label>
+          <label class="f">Gemini 模型<input type="text" name="gemini_model" placeholder="gemini-flash-latest"></label>
+          <label class="f">Claude 模型<input type="text" name="claude_model" placeholder="claude-opus-5-5"></label>
+          <label class="f full">Claude API Key<input type="password" name="anthropic_api_key" placeholder="sk-ant-..."></label>
+        </div>
+      </details>
+      <div class="actions">
+        <button type="button" id="testNotify">傳測試訊息</button>
+        <button class="primary" type="submit">儲存設定</button>
+      </div>
+    </form>
+
+    <div id="pwSection">
+      <h3>手機登入</h3>
+      <div id="phoneBox" class="phone-box"></div>
+      <form id="pwForm" autocomplete="off" style="margin-top:12px">
+        <div class="grid">
+          <label class="f" id="curPwField">目前密碼<input type="password" name="current" autocomplete="current-password"></label>
+          <label class="f">新密碼 <small>（至少 6 碼）</small><input type="password" name="new" minlength="6" required autocomplete="new-password"></label>
+        </div>
+        <div class="actions"><button class="primary" type="submit" id="pwBtn">設定密碼</button></div>
+      </form>
+    </div>
+    <div id="ghSection" hidden>
+      <h3>GitHub</h3>
+      <div id="ghBox" class="phone-box"></div>
+    </div>
+  </section>
+  </div>
+
+  <div class="page guide" id="page-guide" hidden>
+  <section class="card">
+    <h2>📖 使用教學</h2>
+    <p>照著下面做一次就能開始用。圖片都是這個網站的實際畫面（範例資料是目前在追蹤的項目），<b>金鑰與 Token 已經用 ● 遮住</b>。</p>
+    <ol class="flow">
+      <li><b>登入</b>：用 GitHub Token 登入（每台手機／電腦一次）</li>
+      <li><b>設定</b>：填 Telegram 與 Groq（只要第一次）</li>
+      <li><b>新增需求</b>：輸入項目和日期，之後等 Telegram 通知</li>
+    </ol>
+    <nav class="toc">
+      <a href="#g-prep">準備 4 樣東西</a><a href="#g-login">登入</a><a href="#g-settings">設定頁</a>
+      <a href="#g-add">新增需求</a><a href="#g-status">看狀態</a><a href="#g-detail">調整偵測條件</a>
+      <a href="#g-summary">每日總覽</a><a href="#g-trigger">準時觸發器</a><a href="#g-faq">常見問題</a>
+    </nav>
+  </section>
+
+  <!-- ============ 設定 ============ -->
+  <section class="card" id="g-prep">
+    <h2><span class="num">A</span>設定頁面：先準備 4 樣東西</h2>
+    <div class="prep">
+      <div class="pcard">
+        <h4>① Telegram Bot Token</h4>
+        <p class="ex">範例：<code>●●●●●●●●●●:AA●●●●●●●●…Zcs</code></p>
+        <ol>
+          <li>Telegram 搜尋 <b>@BotFather</b>，按「開始」</li>
+          <li>傳 <code>/newbot</code></li>
+          <li>輸入顯示名稱（範例：<b>Bookingreminder_bot</b>）</li>
+          <li>輸入帳號，結尾一定要是 bot（範例：<b>@TKReminder_bot</b>）</li>
+          <li>BotFather 回覆一串 <code>數字:AA…</code>，整串就是 Token</li>
+        </ol>
+      </div>
+      <div class="pcard">
+        <h4>② Telegram Chat ID</h4>
+        <p class="ex">範例：<code>7005●●●●24</code>（一串數字）</p>
+        <ol>
+          <li>打開你剛建立的 bot（範例：@TKReminder_bot），按「開始」並隨便傳一句話</li>
+          <li>回到本站「⚙️ 設定」，把 Token 貼進 Bot Token 欄位</li>
+          <li>按 Chat ID 旁的 <b>「自動取得」</b>，就會自動填好</li>
+        </ol>
+      </div>
+      <div class="pcard">
+        <h4>③ Groq API Key（免費 AI）</h4>
+        <p class="ex">範例：<code>gsk_●●●●●●●●●●●●●●●●</code></p>
+        <ol>
+          <li>打開 <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a>，用 Google 帳號登入</li>
+          <li>按 <b>Create API Key</b>，名稱隨意</li>
+          <li>複製 <code>gsk_</code> 開頭的整串（只會顯示一次）</li>
+        </ol>
+      </div>
+      <div class="pcard">
+        <h4>＋ 備用金鑰（選填）</h4>
+        <p class="ex">沒有也能用，之後再補。使用順序：Groq → Groq（備用）→ Gemini</p>
+        <ol>
+          <li><b>Groq 備用</b>：用另一個帳號登入 console.groq.com 建一組 Key，貼到「Groq API Key（備用）」。第一組當天額度用完會自動換這組</li>
+          <li><b>Gemini</b>（最後備援）：到 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> 按 <b>Create API key</b>，複製 <code>AIza</code> 開頭的整串。只有 Groq 兩組都用完才會用到</li>
+        </ol>
+      </div>
+      <div class="pcard">
+        <h4>④ GitHub Token（登入本站用）</h4>
+        <p class="ex">範例：<code>github_pat_11A●●●●●●●●</code></p>
+        <ol>
+          <li>打開 <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub → Fine-grained token</a></li>
+          <li>Repository access 選 <b>Only select repositories</b> → 只勾 <code>booking-reminder</code></li>
+          <li>Permissions 把 <b>Contents、Actions、Secrets、Variables</b> 設為 <b>Read and write</b></li>
+          <li>按 Generate token，複製</li>
+        </ol>
+      </div>
+    </div>
+    <p class="hint">⚠️ Token 和 Key 就像密碼，不要傳給別人或貼到群組。外洩的話，Telegram 對 @BotFather 傳 <code>/revoke</code>、Groq 刪掉重建，再到設定頁輸入新的值。</p>
+  </section>
+
+  <section class="card" id="g-login">
+    <h2><span class="num">A1</span>登入（GitHub 版）</h2>
+    <div class="shot-row">
+      <figure class="shot narrow">
+        <img src="static/guide/01-login.jpg?v=25c8812b24" alt="登入頁範例" loading="lazy" width="560" height="780">
+        <span class="mk" style="left:10%;top:25%">1</span>
+        <span class="mk" style="left:84%;top:20.8%">2</span>
+        <span class="mk" style="left:10%;top:35.4%">3</span>
+        <span class="mk" style="left:10%;top:45%">4</span>
+      </figure>
+      <ol class="steps">
+        <li><b>GitHub 帳號</b>：<code>Austine-ho</code>（已自動帶入）</li>
+        <li><b>私人 repo 名稱</b>：<code>booking-reminder</code>（已自動帶入）</li>
+        <li><b>GitHub Token</b>：貼上 ④ 的 <code>github_pat_…</code></li>
+        <li>按 <b>登入</b>。手機和電腦各登入一次，之後會記住。</li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="card" id="g-settings">
+    <h2><span class="num">A2</span>設定頁（上方「⚙️ 設定」分頁）</h2>
+    <div class="shot-row">
+      <figure class="shot">
+        <img src="static/guide/02-settings.jpg?v=2060a851a7" alt="設定頁範例" loading="lazy" width="800" height="980">
+        <span class="mk" style="left:2.5%;top:34.8%">1</span>
+        <span class="mk" style="left:97%;top:45%">2</span>
+        <span class="mk" style="left:2.5%;top:60%">3</span>
+        <span class="mk" style="left:71%;top:56.5%">4</span>
+        <span class="mk" style="left:2.5%;top:70.4%">5</span>
+        <span class="mk" style="left:71%;top:82.2%">6</span>
+        <span class="mk" style="left:90.2%;top:80.4%">7</span>
+      </figure>
+      <ol class="steps">
+        <li><b>Bot Token</b>：貼上 ① 的整串 Token</li>
+        <li><b>Chat ID</b>：先對 bot 傳一句話，再按「自動取得」（範例 <code>7005●●●●24</code>）</li>
+        <li><b>AI 來源</b>：選「Groq（免費）」</li>
+        <li><b>Groq API Key</b>：貼上 ③ 的 <code>gsk_…</code></li>
+        <li><b>AI 次數上限</b>：保持 6 和 30 就好，免費額度很夠用</li>
+        <li>先按 <b>儲存設定</b>，再按 <b>傳測試訊息</b>，1 分鐘內 Telegram 會收到「✅ 測試訊息」</li>
+        <li>儲存後，金鑰欄位會顯示「已設定」，網頁上看不到內容（加密存在 GitHub）。要改的話直接輸入新值再儲存。</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ============ 監控 ============ -->
+  <section class="card" id="g-add">
+    <h2><span class="num">B1</span>監控頁：新增需求（AI 自動查詢）</h2>
+    <p>不知道要看哪個網站時，用這個方式。AI 會上網找官方售票網站和開賣規則，再讓你勾選要監控哪些。</p>
+    <div class="shot-row">
+      <figure class="shot">
+        <img src="static/guide/03-add-ai.jpg?v=d80e3e64de" alt="新增需求（AI）範例" loading="lazy" width="800" height="620">
+        <span class="mk" style="left:2.5%;top:18.5%">1</span>
+        <span class="mk" style="left:62.5%;top:12.9%">2</span>
+        <span class="mk" style="left:2.5%;top:35%">3</span>
+        <span class="mk" style="left:2.5%;top:47.3%">4</span>
+        <span class="mk" style="left:2.5%;top:71.8%">5</span>
+        <span class="mk" style="left:2.5%;top:83.9%">6</span>
+        <span class="mk" style="left:82.5%;top:92.6%">7</span>
+      </figure>
+      <ol class="steps">
+        <li><b>想訂的項目</b>：寫清楚一點（範例：<code>日本環球影城門票</code>）</li>
+        <li><b>目標日期</b>：要入場／使用的日期（範例：2027/02/25）</li>
+        <li><b>備註</b>：人數、票種、想買官方或代理商…AI 查詢時會參考</li>
+        <li><b>每天檢查時間</b>：選每天 1／2／3 次，時間可以改（台灣時間）。建議保留早上一次</li>
+        <li><b>預計開放時間</b>：不知道就留空，AI 查到會自動填</li>
+        <li><b>網址來源</b>：選「🤖 AI 自動查詢」</li>
+        <li>按 <b>新增需求</b>，約 1～2 分鐘後下方會列出 AI 找到的網站，勾選後按加入</li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span class="num">B2</span>監控頁：新增需求（自己填網址）</h2>
+    <p>已經知道官方網站、或官方有固定開賣規則時用這個。範例：大阪海遊館的 eチケット「來館日 30 天前開賣」。</p>
+    <div class="shot-row">
+      <figure class="shot">
+        <img src="static/guide/04-add-manual.jpg?v=b6d638d8d2" alt="新增需求（自己填網址）範例" loading="lazy" width="800" height="755">
+        <span class="mk" style="left:2.5%;top:59%">1</span>
+        <span class="mk" style="left:60%;top:51.1%">2</span>
+        <span class="mk" style="left:2.5%;top:68.9%">3</span>
+        <span class="mk" style="left:2.5%;top:84.5%">4</span>
+        <span class="mk" style="left:82.5%;top:94.4%">5</span>
+      </figure>
+      <ol class="steps">
+        <li><b>預計開放時間</b>：官方公告的開賣時間（範例：2026/12/04 00:00）</li>
+        <li><b>時區</b>：選開賣地的時區（範例：東京）。系統會自動換算成台灣時間</li>
+        <li><b>網址來源</b>：選「自己填網址」</li>
+        <li><b>網址</b>：一行一個，貼<b>官方網站</b>（範例：<code>https://www.kaiyukan.com/info/ticket/</code>）</li>
+        <li>按 <b>新增需求</b>。到預計開放時間後約 10 分鐘會再檢查一次並通知，前一天也會先提醒</li>
+      </ol>
+    </div>
+    <p class="hint">⚠️ <b>Klook、KKday、Trip.com</b> 這類網站會擋程式，貼了會一直「讀取失敗」，網頁也會跳出提醒。請改貼官方網站，或用 AI 自動查詢。</p>
+  </section>
+
+  <section class="card" id="g-status">
+    <h2><span class="num">B3</span>監控頁：看狀態</h2>
+    <div class="shot-row">
+      <figure class="shot">
+        <img src="static/guide/05-status.jpg?v=798beef82c" alt="監控狀態範例" loading="lazy" width="800" height="350">
+        <span class="mk" style="left:3.25%;top:26.6%">1</span>
+        <span class="mk" style="left:65%;top:27.4%">2</span>
+        <span class="mk" style="left:3.25%;top:40.6%">3</span>
+        <span class="mk" style="left:3.25%;top:73.7%">4</span>
+        <span class="mk" style="left:23.5%;top:73.7%">5</span>
+        <span class="mk" style="left:70%;top:73.7%">6</span>
+        <span class="mk" style="left:96%;top:75%">7</span>
+      </figure>
+      <ol class="steps">
+        <li><b>項目名稱</b>（橘紅色）與目標日期、每天檢查時間</li>
+        <li><b>＋網站</b>：多加一個監控網站；<b>編輯</b>：改日期、檢查時間、預計開放時間；<b>暫停／刪除</b></li>
+        <li><b>預計開放</b>：台灣時間（括號內是當地時間）＋倒數天數，下面一行是官方開賣規則</li>
+        <li><b>網站</b>：監控的網址</li>
+        <li><b>狀態</b>：<span class="st watching">監控中</span> <span class="st opened">已開放！</span> <span class="st error">讀取失敗</span> <span class="st paused">已暫停</span></li>
+        <li><b>上次確認／結果／下次確認</b>：程式什麼時候看過、看到什麼、下次什麼時候看</li>
+        <li><b>立即檢查</b>：馬上請 GitHub 檢查一次（約 1 分鐘出結果）</li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="card" id="g-detail">
+    <h2><span class="num">B4</span>監控頁：調整偵測條件（進階）</h2>
+    <p>點網站那一列可以展開。一般不用改，AI 或範本會自動設好。</p>
+    <div class="shot-row">
+      <figure class="shot">
+        <img src="static/guide/06-detail.jpg?v=ede41186ae" alt="偵測條件範例" loading="lazy" width="800" height="530">
+        <span class="mk" style="left:3.75%;top:55.8%">1</span>
+        <span class="mk" style="left:3.75%;top:65.7%">2</span>
+        <span class="mk" style="left:3.75%;top:86.2%">3</span>
+        <span class="mk" style="left:3.75%;top:94.7%">4</span>
+      </figure>
+      <ol class="steps">
+        <li><b>完整結果</b>：上次檢查的完整說明</li>
+        <li><b>偵測條件</b>：怎麼判斷「開賣了」，可以加多個
+          <ul>
+            <li>到達預計開放時間：時間到就通知（官方有固定規則、但網站擋程式時用，例如海遊館、USJ）</li>
+            <li>文字出現／文字消失：例如出現「2027」、「準備中」消失</li>
+            <li>元素出現／按鈕可點：網頁上出現某個購買連結或按鈕</li>
+            <li>出現目標日期、頁面有變動、AI 判斷</li>
+          </ul>
+        </li>
+        <li><b>條件判斷</b>：「任一成立就通知」或「全部成立才通知」</li>
+        <li>改完按 <b>儲存條件</b>；<b>重設狀態</b>會讓「已開放」的項目重新開始監控</li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="card" id="g-summary">
+    <h2><span class="num">B5</span>監控頁：每日 Telegram 總覽</h2>
+    <div class="shot-row">
+      <figure class="shot">
+        <img src="static/guide/07-summary.jpg?v=44e657b4f4" alt="每日總覽設定範例" loading="lazy" width="800" height="241">
+        <span class="mk" style="left:2.5%;top:43%">1</span>
+        <span class="mk" style="left:59.4%;top:30%">2</span>
+        <span class="mk" style="left:70.6%;top:89.6%">3</span>
+        <span class="mk" style="left:97%;top:89.6%">4</span>
+      </figure>
+      <ol class="steps">
+        <li>選「開啟」</li>
+        <li>傳送時間（範例：晚上 11:00）。GitHub 排程可能晚 5～30 分鐘送到</li>
+        <li><b>立即傳一次看看</b>：馬上收到一份總覽</li>
+        <li>按 <b>儲存</b></li>
+      </ol>
+    </div>
+    <p><b>Telegram 收到的樣子：</b></p>
+    <pre class="tg">📋 每日追蹤總覽（11/17 23:05）
+共 7 項｜🎫 已開放 0｜⬜ 等待中 7｜❌ 讀取失敗 0
+
+1. 大阪海遊館｜2027/01/03
+📅 預計開放：12/04 00:00（UTC+09），台灣 12/03 23:00，還有 16 天
+🔁 每天 2 次：07:30、21:00
+🌐 海遊館官方（eチケット）
+   狀態：⬜ 未開放
+   上次確認：11/17 21:00｜尚未到開放時間 12/04 00:00（UTC+09）
+   下次確認：11/18 07:30
+
+7. 日本環球影城門票｜2027/02/25
+📅 預計開放：12/25 12:00（UTC+09），台灣 12/25 11:00，還有 38 天
+🔁 每天 2 次：09:30、20:00
+🌐 USJ 官方 WEB チケットストア（1デイ・スタジオ・パス）
+   狀態：⬜ 未開放
+   …</pre>
+  </section>
+
+  <section class="card" id="g-trigger">
+    <h2><span class="num">C</span>準時觸發器（強烈建議設定）</h2>
+    <p>GitHub 內建的定時排程在尖峰時段常常<b>延遲好幾小時，甚至直接略過</b>（實測一天只跑了幾次），會讓「09:30 檢查」拖到下午才做。
+      設定一個免費的 Google Apps Script，它每 10 分鐘看一次：<b>有網站到了檢查時間才請 GitHub 執行</b>，檢查最多晚 10 分鐘，也不浪費 GitHub 的免費分鐘數。</p>
+    <ol class="steps">
+      <li><b>建一組專用 Token</b>：<a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub → Fine-grained token</a>
+        <ul><li>Repository access：只選 <code>booking-reminder</code></li>
+            <li>Permissions：<b>Actions → Read and write</b>、<b>Contents → Read-only</b>（其他都不用）</li></ul></li>
+      <li><b>建立腳本</b>：打開 <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com 新專案</a>，
+        把 <a href="static/gas-trigger.js?v=752f8d1bca" target="_blank" rel="noopener">這個檔案</a> 的內容全部複製貼上，按 💾 儲存</li>
+      <li><b>填設定</b>：左側 ⚙️「專案設定」→ 最下面「指令碼屬性」→ 新增三個：
+        <ul><li><code>GITHUB_TOKEN</code>：第 1 步的 Token</li>
+            <li><code>REPO</code>：<code>Austine-ho/booking-reminder</code></li>
+            <li><code>SUMMARY_TIME</code>：<code>23:00</code>（和每日總覽時間一樣）</li></ul></li>
+      <li><b>啟動</b>：回到編輯器，上方函式選 <code>setup</code> → 按「執行」→ 依指示授權</li>
+      <li><b>確認</b>：函式改選 <code>tick</code> → 執行，下方記錄出現「已觸發」或「沒有到時間的項目」就完成了</li>
+    </ol>
+  </section>
+
+  <section class="card" id="g-faq">
+    <h2><span class="num">?</span>常見問題</h2>
+    <dl class="faq">
+      <dt>一直顯示「讀取失敗 403」？</dt>
+      <dd>那個網站擋程式（Klook、KKday 最常見）。請改成官方網站，或刪掉後用「🤖 AI 自動查詢」重新新增。</dd>
+      <dt>通知會比實際開賣晚嗎？</dt>
+      <dd>會晚一點：GitHub 每 30 分鐘喚醒一次，尖峰時段可能再晚 10～30 分鐘。這個工具是「通知你今天開賣了」，不是搶票用。</dd>
+      <dt>AI 結果寫「信心 low」？</dt>
+      <dd>AI 看不出來時不會通知你（避免誤報）。這種網站建議偶爾自己打開看看，或改用「到達預計開放時間」條件。</dd>
+      <dt>新增需求後沒有反應？</dt>
+      <dd>GitHub 版要等 Actions 跑完（約 1 分鐘），頁面每 30 秒自動更新。確認右上角有「GitHub」綠色標籤；沒有的話按「登出」重新登入。</dd>
+      <dt>AI 查詢顯示「Groq 今天的免費額度已用完」？</dt>
+      <dd>Groq 免費版每個模型每天有 token 上限，AI 查詢會讀很多網頁，查兩三次就可能用完。訊息會告訴你約幾分鐘後恢復。可以在設定填「Groq API Key（備用）」（另一個帳號），用完會自動換；兩組都用完才會用 Gemini（有填的話）。每次的定時檢查用另一個較小的模型，額度分開算。</dd>
+      <dt>換手機了？</dt>
+      <dd>新手機打開網站，用同一個 GitHub Token 登入即可；資料都存在 GitHub，不會不見。</dd>
+    </dl>
+  </section>
+  </div>
+</div>
+
+<!-- 已開放提醒：進站時跳出，直到刪除該需求 -->
+<dialog id="openDlg" class="open-dlg" aria-labelledby="openDlgTitle">
+  <h3 id="openDlgTitle">🎫 可以訂了！</h3>
+  <p class="hint">以下項目已偵測到開放，名額可能很快賣完，請盡快前往訂購。訂好後刪除需求，就不會再提醒。</p>
+  <div id="openList"></div>
+  <div class="actions">
+    <button type="button" onclick="this.closest('dialog').close()">稍後再說</button>
+  </div>
+</dialog>
+
+<!-- 編輯需求 -->
+<dialog id="editDlg">
+  <form id="editForm" method="dialog">
+    <h3>編輯需求</h3>
+    <div class="grid">
+      <label class="f full">項目<input type="text" name="item" required></label>
+      <label class="f">目標日期<input type="date" name="target_date"></label>
+      <label class="f">備註<input type="text" name="notes"></label>
+      <div class="f full">每天檢查時間 <small class="tzlabel"></small><div class="times" data-times></div></div>
+      <label class="f full">開賣規則：入場日前幾天開賣 <small>（選填，例如 USJ 填 62；填了以後改目標日期，預計開放時間會自動跟著改）</small>
+        <input type="number" name="open_days_before" min="0" max="400" step="1" inputmode="numeric" placeholder="不填＝自己指定開放時間"></label>
+      <label class="f">預計開放時間<input type="datetime-local" name="open_local"></label>
+      <label class="f">時區<select name="open_tz"></select></label>
+    </div>
+    <div class="actions">
+      <button type="button" onclick="this.closest('dialog').close()">取消</button>
+      <button class="primary" type="submit">儲存</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 新增網站 -->
+<dialog id="siteDlg">
+  <form id="siteForm" method="dialog">
+    <h3>新增監控網站</h3>
+    <div class="grid">
+      <label class="f full">網址<input type="url" name="url" required placeholder="https://..."></label>
+      <label class="f full">名稱 <small>（選填）</small><input type="text" name="name" placeholder="例：Klook"></label>
+    </div>
+    <div class="actions">
+      <button type="button" onclick="this.closest('dialog').close()">取消</button>
+      <button class="primary" type="submit">新增</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="static/backend.js?v=75e7451d78"></script>
+<script src="static/app.js?v=e02dd65cf5"></script>
+</body>
+</html>
